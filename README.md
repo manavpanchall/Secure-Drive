@@ -51,6 +51,3 @@ Follow these steps to set up and run the project locally.
    ```bash
    git clone https://github.com/your-username/secure-drive.git
    cd secure-drive
-
-
-  
