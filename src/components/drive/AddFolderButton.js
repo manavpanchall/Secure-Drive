@@ -1,75 +1,108 @@
-import React, { useState } from "react"
-import { Button, Modal, Form } from "react-bootstrap"
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"
-import { faFolderPlus } from "@fortawesome/free-solid-svg-icons"
-import { database } from "../../firebase"
-import { useAuth } from "../../contexts/AuthContext"
-import { ROOT_FOLDER } from "../../hooks/useFolder"
+import React, { useState } from "react";
+import { useAuth } from "../../contexts/AuthContext";
+import { FolderPlus, X } from "lucide-react";
+import { database } from "../../firebase";
+import { ROOT_FOLDER } from "../../hooks/useFolder";
 
-export default function AddFolderButton( { currentFolder } ) {
-    const [open, setOpen] = useState(false)
-    const [name, setName] = useState("")
-    const { currentUser } = useAuth()
+export default function AddFolderButton({ currentFolder }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [name, setName] = useState("");
+  const { currentUser } = useAuth();
 
-    function openModal() {
-        setOpen(true)
+  function handleSubmit(e) {
+    e.preventDefault();
+    if (!name.trim() || currentFolder == null) return;
+
+    const path = [...currentFolder.path];
+    if (currentFolder !== ROOT_FOLDER) {
+      path.push({ name: currentFolder.name, id: currentFolder.id });
     }
 
-    function closeModal() {
-        setOpen(false)
-    }
-    function handleSubmit(e) {
-        e.preventDefault()
+    database.folders.add({
+      name: name.trim(),
+      parentId: currentFolder.id,
+      userId: currentUser.uid,
+      path: path,
+      createdAt: database.getCurrentTimestamp(),
+    });
 
-        if (currentFolder == null) return
+    setName("");
+    setIsOpen(false);
+  }
 
-        const path = [...currentFolder.path]
-        if (currentFolder !== ROOT_FOLDER) {
-            path.push({ name: currentFolder.name, id: currentFolder.id })
-        }
+  return (
+    <>
+      <button
+        onClick={() => setIsOpen(true)}
+        className="btn-secondary flex items-center space-x-2"
+      >
+        <FolderPlus className="h-5 w-5" />
+        <span className="hidden sm:inline">New Folder</span>
+      </button>
 
-        database.folders.add({
-            name: name,
-            parentId: currentFolder.id,
-            userId: currentUser.uid,
-            path: path,
-            createdAt: database.getCurrentTimestamp()
-        })
+      {/* Modal */}
+      {isOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full animate-slide-up">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 bg-blue-100 rounded-lg">
+                    <FolderPlus className="h-6 w-6 text-blue-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">
+                      Create New Folder
+                    </h3>
+                    <p className="text-sm text-gray-600">
+                      Enter a name for your new folder
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsOpen(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
 
-        setName("")
-        closeModal()
-    }
+              <form onSubmit={handleSubmit}>
+                <div className="mb-6">
+                  <label className="form-label block text-sm font-medium text-gray-700 mb-2">
+                    Folder Name
+                  </label>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    placeholder="e.g., Project Documents"
+                    autoFocus
+                  />
+                </div>
 
-
-
-    return (
-        <>
-            <Button onClick={openModal} variant="outline-success" size="sm">
-                <FontAwesomeIcon icon={faFolderPlus} />
-            </Button>
-            <Modal show={open} onHide={closeModal}>
-                <Form onSubmit={handleSubmit}>
-                    <Modal.Body>
-                        <Form.Group>
-                            <Form.Label>Folder Name</Form.Label>
-                            <Form.Control
-                                type="text"
-                                required
-                                value={name}
-                                onChange={e => setName(e.target.value)}
-                            />
-                        </Form.Group>
-                    </Modal.Body>
-                    <Modal.Footer>
-                        <Button variant="secondary" onClick={closeModal}>
-                            Close
-                        </Button>
-                        <Button variant="success" type="submit">
-                            Add Folder
-                        </Button>
-                    </Modal.Footer>
-                </Form>
-            </Modal>
-        </>
-    )
+                <div className="flex space-x-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsOpen(false)}
+                    className="btn-secondary flex-1"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!name.trim()}
+                    className="btn-primary flex-1"
+                  >
+                    Create Folder
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
 }

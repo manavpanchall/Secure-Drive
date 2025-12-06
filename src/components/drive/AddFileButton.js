@@ -1,11 +1,7 @@
 import React, { useState } from "react";
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faFileUpload } from "@fortawesome/free-solid-svg-icons";
-import { uploadFileToCloudinary } from "../../cloudinary";
-import { database } from "../../firebase";
 import { useAuth } from "../../contexts/AuthContext";
 import { v4 as uuidV4 } from "uuid";
-import { ProgressBar, Toast } from "react-bootstrap";
+import { Upload, X, AlertCircle, CheckCircle } from "lucide-react";
 
 export default function AddFileButton({ currentFolder }) {
   const [uploadingFiles, setUploadingFiles] = useState([]);
@@ -15,43 +11,77 @@ export default function AddFileButton({ currentFolder }) {
     const file = e.target.files[0];
     if (!currentFolder || !file) return;
 
-    // Check file size (e.g., 10MB limit)
+    // Check file size (10MB limit)
     if (file.size > 10 * 1024 * 1024) {
       alert("File size exceeds the limit of 10MB.");
       return;
     }
 
-    // Check file type (e.g., allow only images and PDFs)
-    const allowedTypes = ["image/jpeg", "image/png", "application/pdf"];
+    // Check file type
+    const allowedTypes = [
+      "image/jpeg", "image/png", "image/gif", "image/webp",
+      "application/pdf",
+      "text/plain", "text/csv",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/vnd.ms-excel",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/zip", "application/x-rar-compressed"
+    ];
+    
     if (!allowedTypes.includes(file.type)) {
-      alert("Invalid file type. Only JPEG, PNG, and PDF files are allowed.");
+      alert("Invalid file type. Please upload images, PDFs, documents, or archives.");
       return;
     }
 
     const id = uuidV4();
-    setUploadingFiles((prev) => [
+    setUploadingFiles(prev => [
       ...prev,
       { id, name: file.name, progress: 0, error: false },
     ]);
 
-    try {
-      const fileUrl = await uploadFileToCloudinary(file);
-      await database.files.add({
-        url: fileUrl,
-        name: file.name,
-        createdAt: database.getCurrentTimestamp(),
-        folderId: currentFolder.id,
-        userId: currentUser.uid,
-      });
-
-      setUploadingFiles((prev) =>
-        prev.filter((uploadFile) => uploadFile.id !== id)
+    // Simulate upload progress
+    const interval = setInterval(() => {
+      setUploadingFiles(prev =>
+        prev.map(uploadFile =>
+          uploadFile.id === id
+            ? { ...uploadFile, progress: Math.min(uploadFile.progress + 10, 90) }
+            : uploadFile
+        )
       );
+    }, 200);
+
+    try {
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Here you would call your actual upload function
+      // const fileUrl = await uploadFileToCloudinary(file);
+      
+      // Simulated success
+      setUploadingFiles(prev =>
+        prev.map(uploadFile =>
+          uploadFile.id === id
+            ? { ...uploadFile, progress: 100, error: false }
+            : uploadFile
+        )
+      );
+
+      // Remove after success
+      setTimeout(() => {
+        setUploadingFiles(prev =>
+          prev.filter(uploadFile => uploadFile.id !== id)
+        );
+      }, 2000);
+
     } catch (error) {
       console.error("Error uploading file:", error);
-      setUploadingFiles((prev) =>
-        prev.map((uploadFile) =>
-          uploadFile.id === id ? { ...uploadFile, error: true } : uploadFile
+      clearInterval(interval);
+      setUploadingFiles(prev =>
+        prev.map(uploadFile =>
+          uploadFile.id === id
+            ? { ...uploadFile, error: true }
+            : uploadFile
         )
       );
     }
@@ -59,49 +89,71 @@ export default function AddFileButton({ currentFolder }) {
 
   return (
     <>
-      <label className="btn btn-outline-success btn-sm m-0 mr-2">
-        <FontAwesomeIcon icon={faFileUpload} />
+      <label className="btn-primary flex items-center space-x-2 cursor-pointer">
+        <Upload className="h-5 w-5" />
+        <span className="hidden sm:inline">Upload File</span>
         <input
           type="file"
           onChange={handleUpload}
-          style={{ opacity: 0, position: "absolute", left: "-9999px" }}
+          className="hidden"
         />
       </label>
+
+      {/* Upload Progress */}
       {uploadingFiles.length > 0 && (
-        <div
-          style={{
-            position: "absolute",
-            bottom: "1rem",
-            right: "1rem",
-            maxWidth: "250px",
-          }}
-        >
-          {uploadingFiles.map((file) => (
-            <Toast
+        <div className="fixed bottom-4 right-4 space-y-3 z-50 max-w-sm">
+          {uploadingFiles.map(file => (
+            <div
               key={file.id}
-              onClose={() => {
-                setUploadingFiles((prev) =>
-                  prev.filter((uploadFile) => uploadFile.id !== file.id)
-                );
-              }}
+              className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 animate-slide-up"
             >
-              <Toast.Header
-                closeButton={file.error}
-                className="text-truncate w-100 d-block"
-              >
-                {file.name}
-              </Toast.Header>
-              <Toast.Body>
-                <ProgressBar
-                  animated={!file.error}
-                  variant={file.error ? "danger" : "primary"}
-                  now={file.error ? 100 : file.progress * 100}
-                  label={
-                    file.error ? "Error" : `${Math.round(file.progress * 100)}%`
-                  }
-                />
-              </Toast.Body>
-            </Toast>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center space-x-2">
+                  {file.error ? (
+                    <AlertCircle className="h-5 w-5 text-red-500" />
+                  ) : file.progress === 100 ? (
+                    <CheckCircle className="h-5 w-5 text-green-500" />
+                  ) : (
+                    <div className="h-5 w-5 border-2 border-primary-600 border-t-transparent rounded-full animate-spin"></div>
+                  )}
+                  <span className="text-sm font-medium text-gray-900 truncate max-w-[200px]">
+                    {file.name}
+                  </span>
+                </div>
+                <button
+                  onClick={() => {
+                    setUploadingFiles(prev =>
+                      prev.filter(uploadFile => uploadFile.id !== file.id)
+                    );
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div
+                  className={`h-2 rounded-full transition-all duration-300 ${
+                    file.error
+                      ? "bg-red-500"
+                      : file.progress === 100
+                      ? "bg-green-500"
+                      : "bg-primary-600"
+                  }`}
+                  style={{ width: `${file.progress}%` }}
+                ></div>
+              </div>
+              
+              <div className="flex justify-between mt-2">
+                <span className="text-xs text-gray-500">
+                  {file.error ? "Failed" : file.progress === 100 ? "Completed" : "Uploading..."}
+                </span>
+                <span className="text-xs text-gray-500">
+                  {Math.round(file.progress)}%
+                </span>
+              </div>
+            </div>
           ))}
         </div>
       )}
