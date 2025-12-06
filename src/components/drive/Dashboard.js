@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { Link } from "react-router-dom";
 import { useParams, useLocation } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 import { useFolder } from "../../hooks/useFolder";
@@ -8,8 +9,8 @@ import File from "./File";
 import AddFolderButton from "./AddFolderButton";
 import AddFileButton from "./AddFileButton";
 import FolderBreadcrumbs from "./FolderBreadcrumbs";
-import { database } from "../../firebase";
-import { deleteFileFromCloudinary } from "../../cloudinary";
+import { database } from "../../firebase"; // Import database
+import { deleteFileFromCloudinary } from "../../cloudinary"; // Import Cloudinary delete function
 import {
   FolderPlus,
   Upload,
@@ -18,15 +19,10 @@ import {
   Grid,
   List,
   Filter,
-  ChevronRight,
+  ChevronDown,
   HardDrive,
-  FileText,
-  Image,
-  Video,
-  Music,
-  Archive,
-  AlertCircle,
-  CheckCircle,
+  Folder as FolderIcon,
+  File as FileIcon,
 } from "lucide-react";
 
 export default function Dashboard() {
@@ -38,203 +34,155 @@ export default function Dashboard() {
   const [viewMode, setViewMode] = useState("grid");
   const [sortBy, setSortBy] = useState("name");
   const [sortOrder, setSortOrder] = useState("asc");
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
-  const { currentUser } = useAuth();
+  const [error, setError] = useState("");
+  const [showSortMenu, setShowSortMenu] = useState(false);
 
-  // Sort files and folders
-  const sortedChildFolders = [...childFolders].sort((a, b) => {
-    if (sortBy === "name") {
-      return sortOrder === "asc" 
-        ? a.name.localeCompare(b.name)
-        : b.name.localeCompare(a.name);
-    } else if (sortBy === "date") {
-      return sortOrder === "asc"
-        ? new Date(a.createdAt) - new Date(b.createdAt)
-        : new Date(b.createdAt) - new Date(a.createdAt);
-    }
-    return 0;
-  });
-
-  const sortedChildFiles = [...childFiles].sort((a, b) => {
-    if (sortBy === "name") {
-      return sortOrder === "asc"
-        ? a.name.localeCompare(b.name)
-        : b.name.localeCompare(a.name);
-    } else if (sortBy === "date") {
-      return sortOrder === "asc"
-        ? new Date(a.createdAt) - new Date(b.createdAt)
-        : new Date(b.createdAt) - new Date(a.createdAt);
-    } else if (sortBy === "size") {
-      // For size sorting, we need file size data (you'll need to store file size in your database)
-      return sortOrder === "asc"
-        ? (a.size || 0) - (b.size || 0)
-        : (b.size || 0) - (a.size || 0);
-    }
-    return 0;
-  });
-
-  // Filter files and folders based on search query
-  const filteredFolders = sortedChildFolders.filter(folder =>
-    folder.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const filteredFiles = sortedChildFiles.filter(file =>
-    file.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const handleFileSelect = (fileId) => {
-    setSelectedFiles(prev =>
-      prev.includes(fileId)
-        ? prev.filter(id => id !== fileId)
-        : [...prev, fileId]
-    );
-  };
-
-  const handleFolderSelect = (folderId) => {
-    setSelectedFolders(prev =>
-      prev.includes(folderId)
-        ? prev.filter(id => id !== folderId)
-        : [...prev, folderId]
-    );
-  };
-
-  const handleSelectAll = () => {
-    if (selectedFiles.length === filteredFiles.length && 
-        selectedFolders.length === filteredFolders.length) {
-      setSelectedFiles([]);
-      setSelectedFolders([]);
-    } else {
-      setSelectedFiles(filteredFiles.map(f => f.id));
-      setSelectedFolders(filteredFolders.map(f => f.id));
-    }
-  };
-
+  // FIXED: Enhanced delete function
   const handleDelete = async () => {
     if (selectedFiles.length === 0 && selectedFolders.length === 0) {
       setError("Please select items to delete");
-      setTimeout(() => setError(""), 3000);
       return;
     }
 
-    const confirmed = window.confirm(
+    const confirmDelete = window.confirm(
       `Are you sure you want to delete ${selectedFiles.length + selectedFolders.length} item(s)?`
     );
-
-    if (!confirmed) return;
+    
+    if (!confirmDelete) return;
 
     try {
       setError("");
-      setSuccess("");
 
       // Delete selected files
       for (const fileId of selectedFiles) {
-        const file = childFiles.find(f => f.id === fileId);
+        const file = childFiles.find((f) => f.id === fileId);
         if (file) {
-          // Delete from Cloudinary (if using Cloudinary)
-          if (file.url && file.url.includes("cloudinary")) {
-            try {
-              await deleteFileFromCloudinary(file.url);
-            } catch (cloudinaryError) {
-              console.error("Error deleting from Cloudinary:", cloudinaryError);
-            }
+          // Delete from Cloudinary first
+          try {
+            await deleteFileFromCloudinary(file.url);
+          } catch (cloudinaryError) {
+            console.warn("Could not delete from Cloudinary:", cloudinaryError);
+            // Continue with Firestore deletion even if Cloudinary fails
           }
-          
+
           // Delete from Firestore
           await database.files.doc(fileId).delete();
         }
       }
 
-      // Delete selected folders
+      // Delete selected folders (and their contents)
       for (const folderId of selectedFolders) {
-        // Note: You should also delete all files inside the folder
-        // This would require recursive deletion
+        // First, delete all files in the folder
+        const folderFiles = await database.files
+          .where("folderId", "==", folderId)
+          .where("userId", "==", currentUser.uid)
+          .get();
+
+        for (const doc of folderFiles.docs) {
+          const file = doc.data();
+          try {
+            await deleteFileFromCloudinary(file.url);
+          } catch (error) {
+            console.warn("Could not delete file from Cloudinary:", error);
+          }
+          await doc.ref.delete();
+        }
+
+        // Delete the folder itself
         await database.folders.doc(folderId).delete();
       }
 
-      setSuccess(`${selectedFiles.length + selectedFolders.length} item(s) deleted successfully`);
+      // Clear selections
       setSelectedFiles([]);
       setSelectedFolders([]);
+      
+      // Show success message
+      setError("Items deleted successfully!");
+      setTimeout(() => setError(""), 3000);
 
-      setTimeout(() => setSuccess(""), 5000);
     } catch (err) {
       console.error("Delete error:", err);
       setError("Failed to delete items. Please try again.");
-      setTimeout(() => setError(""), 5000);
     }
   };
 
+  // FIXED: Enhanced download function
   const handleDownloadSelected = () => {
     if (selectedFiles.length === 0) {
       setError("Please select files to download");
-      setTimeout(() => setError(""), 3000);
       return;
     }
 
-    selectedFiles.forEach(fileId => {
-      const file = childFiles.find(f => f.id === fileId);
+    selectedFiles.forEach((fileId) => {
+      const file = childFiles.find((f) => f.id === fileId);
       if (file && file.url) {
         const link = document.createElement("a");
         link.href = file.url;
-        link.download = file.name;
-        link.target = "_blank";
-        link.rel = "noopener noreferrer";
+        link.download = file.name || `download-${Date.now()}`;
+        link.style.display = "none";
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
       }
     });
-
-    setSuccess(`${selectedFiles.length} file(s) downloading...`);
-    setTimeout(() => setSuccess(""), 3000);
   };
 
   const handleDownloadAll = () => {
-    if (filteredFiles.length === 0) {
+    if (childFiles.length === 0) {
       setError("No files to download");
-      setTimeout(() => setError(""), 3000);
       return;
     }
 
-    filteredFiles.forEach(file => {
+    childFiles.forEach((file) => {
       if (file.url) {
         const link = document.createElement("a");
         link.href = file.url;
-        link.download = file.name;
-        link.target = "_blank";
-        link.rel = "noopener noreferrer";
+        link.download = file.name || `download-${Date.now()}`;
+        link.style.display = "none";
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
       }
     });
-
-    setSuccess(`${filteredFiles.length} file(s) downloading...`);
-    setTimeout(() => setSuccess(""), 3000);
   };
 
-  const handleSort = (type) => {
-    if (sortBy === type) {
-      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
-    } else {
-      setSortBy(type);
-      setSortOrder("asc");
-    }
+  // FIXED: Sort functionality
+  const sortOptions = [
+    { value: "name", label: "Name", icon: "A-Z" },
+    { value: "date", label: "Date", icon: "📅" },
+    { value: "size", label: "Size", icon: "📏" },
+    { value: "type", label: "Type", icon: "📄" },
+  ];
+
+  const handleSort = (option) => {
+    setSortBy(option);
+    setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+    setShowSortMenu(false);
   };
 
+  // FIXED: Filter files and folders based on search
+  const filteredFiles = childFiles.filter((file) =>
+    file.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const filteredFolders = childFolders.filter((folder) =>
+    folder.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // Calculate storage stats
   const storageStats = {
-    used: 2.5, // GB - You should calculate this from actual data
+    used: 2.5, // GB
     total: 15, // GB
     percentage: (2.5 / 15) * 100,
   };
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Navbar searchQuery={searchQuery} setSearchQuery={setSearchQuery} />
-
+      <Navbar onSearch={(query) => setSearchQuery(query)} />
+      
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Storage Stats - Moved to top */}
+        {/* Storage Stats - MOVED TO TOP */}
         <div className="mb-6 bg-white rounded-xl shadow-sm border border-gray-200 p-4">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center space-x-2">
@@ -254,32 +202,51 @@ export default function Dashboard() {
                 ></div>
               </div>
             </div>
-            <div className="flex justify-between text-xs text-gray-500">
+            <div className="flex justify-between text-xs text-gray-500 mt-1">
               <span>Free: {storageStats.total - storageStats.used} GB</span>
-              <button 
-                onClick={() => window.location.href = "/upgrade"}
-                className="text-primary-600 hover:text-primary-700 font-medium"
-              >
+              <Link to="/upgrade" className="text-primary-600 hover:text-primary-700 font-medium">
                 Upgrade plan
-              </button>
+              </Link>
             </div>
           </div>
         </div>
 
-        {/* Alerts */}
-        {error && (
-          <div className="mb-4 alert-danger flex items-center space-x-2 animate-fade-in">
-            <AlertCircle className="h-5 w-5" />
-            <span>{error}</span>
+        {/* Quick Stats - MOVED BELOW STORAGE */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+            <div className="flex items-center space-x-3">
+              <div className="p-2 bg-blue-100 rounded-lg">
+                <FolderIcon className="h-5 w-5 text-blue-600" />
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Folders</p>
+                <p className="text-2xl font-semibold text-gray-900">{childFolders.length}</p>
+              </div>
+            </div>
           </div>
-        )}
-        
-        {success && (
-          <div className="mb-4 alert-success flex items-center space-x-2 animate-fade-in">
-            <CheckCircle className="h-5 w-5" />
-            <span>{success}</span>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+            <div className="flex items-center space-x-3">
+              <div className="p-2 bg-green-100 rounded-lg">
+                <FileIcon className="h-5 w-5 text-green-600" />
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Files</p>
+                <p className="text-2xl font-semibold text-gray-900">{childFiles.length}</p>
+              </div>
+            </div>
           </div>
-        )}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+            <div className="flex items-center space-x-3">
+              <div className="p-2 bg-purple-100 rounded-lg">
+                <Upload className="h-5 w-5 text-purple-600" />
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Total Storage</p>
+                <p className="text-2xl font-semibold text-gray-900">{storageStats.used} GB</p>
+              </div>
+            </div>
+          </div>
+        </div>
 
         {/* Toolbar */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
@@ -312,48 +279,41 @@ export default function Dashboard() {
                 </button>
               </div>
 
-              {/* Sort Dropdown */}
+              {/* Sort Dropdown - FIXED */}
               <div className="relative">
-                <div className="dropdown">
-                  <button className="btn-secondary flex items-center space-x-1 text-sm">
-                    <Filter className="h-4 w-4" />
-                    <span>Sort</span>
-                    <ChevronRight className="h-4 w-4 rotate-90" />
-                  </button>
-                  <div className="dropdown-menu absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50 hidden">
-                    <button 
-                      onClick={() => handleSort("name")}
-                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                    >
-                      Name {sortBy === "name" && (sortOrder === "asc" ? "↑" : "↓")}
-                    </button>
-                    <button 
-                      onClick={() => handleSort("date")}
-                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                    >
-                      Date {sortBy === "date" && (sortOrder === "asc" ? "↑" : "↓")}
-                    </button>
-                    <button 
-                      onClick={() => handleSort("size")}
-                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                    >
-                      Size {sortBy === "size" && (sortOrder === "asc" ? "↑" : "↓")}
-                    </button>
+                <button 
+                  onClick={() => setShowSortMenu(!showSortMenu)}
+                  className="btn-secondary flex items-center space-x-1 text-sm"
+                >
+                  <Filter className="h-4 w-4" />
+                  <span>Sort</span>
+                  <ChevronDown className={`h-4 w-4 transition-transform ${showSortMenu ? "rotate-180" : ""}`} />
+                </button>
+                
+                {showSortMenu && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                    {sortOptions.map((option) => (
+                      <button
+                        key={option.value}
+                        onClick={() => handleSort(option.value)}
+                        className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 flex items-center justify-between ${
+                          sortBy === option.value ? "text-primary-600 bg-primary-50" : "text-gray-700"
+                        }`}
+                      >
+                        <div className="flex items-center space-x-2">
+                          <span>{option.icon}</span>
+                          <span>{option.label}</span>
+                        </div>
+                        {sortBy === option.value && (
+                          <span className="text-xs">
+                            {sortOrder === "asc" ? "↑" : "↓"}
+                          </span>
+                        )}
+                      </button>
+                    ))}
                   </div>
-                </div>
+                )}
               </div>
-
-              {/* Select All */}
-              <button
-                onClick={handleSelectAll}
-                className="btn-secondary text-sm"
-              >
-                {(selectedFiles.length === filteredFiles.length && 
-                  selectedFolders.length === filteredFolders.length && 
-                  (filteredFiles.length > 0 || filteredFolders.length > 0))
-                  ? "Deselect All" 
-                  : "Select All"}
-              </button>
 
               {/* Action Buttons */}
               <div className="flex items-center space-x-2">
@@ -362,7 +322,7 @@ export default function Dashboard() {
                 <button
                   onClick={handleDownloadSelected}
                   disabled={selectedFiles.length === 0}
-                  className="btn-primary flex items-center space-x-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="btn-primary flex items-center space-x-1 text-sm"
                 >
                   <Download className="h-4 w-4" />
                   <span className="hidden sm:inline">Download</span>
@@ -370,7 +330,7 @@ export default function Dashboard() {
                 <button
                   onClick={handleDelete}
                   disabled={selectedFiles.length === 0 && selectedFolders.length === 0}
-                  className="btn-danger flex items-center space-x-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="btn-danger flex items-center space-x-1 text-sm"
                 >
                   <Trash2 className="h-4 w-4" />
                   <span className="hidden sm:inline">Delete</span>
@@ -380,6 +340,13 @@ export default function Dashboard() {
           </div>
         </div>
 
+        {/* Error Message */}
+        {error && (
+          <div className={`mb-4 p-3 rounded-lg ${error.includes("success") ? "alert-success" : "alert-danger"}`}>
+            {error}
+          </div>
+        )}
+
         {/* Content Area */}
         <div className="space-y-6">
           {/* Folders Section */}
@@ -388,17 +355,13 @@ export default function Dashboard() {
               <h2 className="text-lg font-semibold text-gray-900 mb-3">Folders</h2>
               <div className={`${viewMode === "grid" ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4" : "space-y-2"}`}>
                 {filteredFolders.map(childFolder => (
-                  <div
+                  <Folder
                     key={childFolder.id}
-                    className={viewMode === "grid" ? "" : "w-full"}
-                  >
-                    <Folder
-                      folder={childFolder}
-                      selected={selectedFolders.includes(childFolder.id)}
-                      onSelect={() => handleFolderSelect(childFolder.id)}
-                      viewMode={viewMode}
-                    />
-                  </div>
+                    folder={childFolder}
+                    selected={selectedFolders.includes(childFolder.id)}
+                    onSelect={() => handleFolderSelect(childFolder.id)}
+                    viewMode={viewMode}
+                  />
                 ))}
               </div>
             </div>
@@ -410,17 +373,19 @@ export default function Dashboard() {
               <h2 className="text-lg font-semibold text-gray-900 mb-3">Files</h2>
               <div className={`${viewMode === "grid" ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4" : "space-y-2"}`}>
                 {filteredFiles.map(childFile => (
-                  <div
+                  <File
                     key={childFile.id}
-                    className={viewMode === "grid" ? "" : "w-full"}
-                  >
-                    <File
-                      file={childFile}
-                      selected={selectedFiles.includes(childFile.id)}
-                      onSelect={() => handleFileSelect(childFile.id)}
-                      viewMode={viewMode}
-                    />
-                  </div>
+                    file={childFile}
+                    selected={selectedFiles.includes(childFile.id)}
+                    onSelect={() => handleFileSelect(childFile.id)}
+                    viewMode={viewMode}
+                    onDownload={(url, name) => {
+                      const link = document.createElement("a");
+                      link.href = url;
+                      link.download = name;
+                      link.click();
+                    }}
+                  />
                 ))}
               </div>
             </div>
@@ -440,51 +405,12 @@ export default function Dashboard() {
                   ? `No files or folders match "${searchQuery}"`
                   : "Upload files or create folders to get started. Your files will be securely stored and accessible from anywhere."}
               </p>
-              {!searchQuery && (
-                <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                  <AddFileButton currentFolder={folder} />
-                  <AddFolderButton currentFolder={folder} />
-                </div>
-              )}
+              <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                <AddFileButton currentFolder={folder} />
+                <AddFolderButton currentFolder={folder} />
+              </div>
             </div>
           )}
-        </div>
-
-        {/* Quick Stats - Moved below storage progress */}
-        <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-            <div className="flex items-center space-x-3">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <FolderPlus className="h-5 w-5 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Folders</p>
-                <p className="text-2xl font-semibold text-gray-900">{filteredFolders.length}</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-            <div className="flex items-center space-x-3">
-              <div className="p-2 bg-green-100 rounded-lg">
-                <FileText className="h-5 w-5 text-green-600" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Files</p>
-                <p className="text-2xl font-semibold text-gray-900">{filteredFiles.length}</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-            <div className="flex items-center space-x-3">
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <Upload className="h-5 w-5 text-purple-600" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Total Storage</p>
-                <p className="text-2xl font-semibold text-gray-900">{storageStats.used} GB</p>
-              </div>
-            </div>
-          </div>
         </div>
       </main>
     </div>

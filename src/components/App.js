@@ -7,7 +7,7 @@ import Login from "./authentication/Login";
 import Signup from "./authentication/Signup";
 import ForgotPassword from "./authentication/ForgotPassword";
 import UpdateProfile from "./authentication/UpdateProfile";
-import Upgrade from "./authentication/Upgrade"; // Add this
+import UpgradePlan from "./authentication/UpgradePlan"; // Add this import
 import Dashboard from "./drive/Dashboard";
 
 function App() {
@@ -19,10 +19,10 @@ function App() {
           <PrivateRoute exact path="/" component={Dashboard} />
           <PrivateRoute exact path="/folder/:folderId" component={Dashboard} />
 
-          {/* Profile & Upgrade */}
+          {/* Profile & Settings */}
           <PrivateRoute path="/profile" component={Profile} />
           <PrivateRoute path="/update-profile" component={UpdateProfile} />
-          <PrivateRoute path="/upgrade" component={Upgrade} /> {/* Add this */}
+          <PrivateRoute path="/upgrade" component={UpgradePlan} /> {/* Add this route */}
 
           {/* Authentication */}
           <Route path="/signup" component={Signup} />

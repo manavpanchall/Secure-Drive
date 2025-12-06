@@ -8,14 +8,14 @@ import {
   Menu,
   X,
   Search,
-  ChevronDown,
 } from "lucide-react";
 
-export default function NavbarComponent({ searchQuery = "", setSearchQuery = () => {} }) {
+export default function NavbarComponent({ onSearch }) {
   const { currentUser, logout } = useAuth();
   const history = useHistory();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const handleProfileClick = () => {
     history.push("/profile");
@@ -28,7 +28,18 @@ export default function NavbarComponent({ searchQuery = "", setSearchQuery = () 
   };
 
   const handleSearch = (e) => {
-    setSearchQuery(e.target.value);
+    const value = e.target.value;
+    setSearchQuery(value);
+    if (onSearch) {
+      onSearch(value);
+    }
+  };
+
+  const clearSearch = () => {
+    setSearchQuery("");
+    if (onSearch) {
+      onSearch("");
+    }
   };
 
   return (
@@ -57,14 +68,14 @@ export default function NavbarComponent({ searchQuery = "", setSearchQuery = () 
                   value={searchQuery}
                   onChange={handleSearch}
                   placeholder="Search files and folders..."
-                  className="pl-10 pr-4 py-2 w-64 lg:w-80 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  className="pl-10 pr-10 py-2 w-64 lg:w-80 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 />
                 {searchQuery && (
                   <button
-                    onClick={() => setSearchQuery("")}
-                    className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                    onClick={clearSearch}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
                   >
-                    <X className="h-4 w-4 text-gray-400 hover:text-gray-600" />
+                    <X className="h-5 w-5" />
                   </button>
                 )}
               </div>
@@ -105,11 +116,12 @@ export default function NavbarComponent({ searchQuery = "", setSearchQuery = () 
                   </div>
                   <div className="hidden md:block text-left">
                     <p className="text-sm font-medium text-gray-900">
-                      {currentUser.displayName || currentUser.email}
+                      {currentUser.displayName || currentUser.email.split('@')[0]}
                     </p>
-                    <p className="text-xs text-gray-500">Free Plan</p>
+                    <p className="text-xs text-gray-500">
+                      {currentUser.email.includes('@gmail.com') ? 'Google Account' : 'Email Account'}
+                    </p>
                   </div>
-                  <ChevronDown className={`h-4 w-4 text-gray-500 transition-transform ${isProfileDropdownOpen ? 'rotate-180' : ''}`} />
                 </button>
 
                 {/* Dropdown menu */}
@@ -122,6 +134,9 @@ export default function NavbarComponent({ searchQuery = "", setSearchQuery = () 
                       <p className="text-xs text-gray-500 truncate">
                         {currentUser.email}
                       </p>
+                      <p className="text-xs text-primary-600 font-medium mt-1">
+                        {currentUser.email.includes('@gmail.com') ? 'Google Account' : 'Email Account'}
+                      </p>
                     </div>
                     <button
                       onClick={handleProfileClick}
@@ -130,18 +145,13 @@ export default function NavbarComponent({ searchQuery = "", setSearchQuery = () 
                       <User className="h-4 w-4" />
                       <span>Profile</span>
                     </button>
-                    <button
-                      onClick={() => {
-                        setIsProfileDropdownOpen(false);
-                        window.location.href = "/upgrade";
-                      }}
+                    <Link
+                      to="/upgrade"
                       className="w-full text-left px-4 py-2 text-sm text-green-600 hover:bg-green-50 flex items-center space-x-2"
                     >
-                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                      </svg>
-                      <span>Upgrade Plan</span>
-                    </button>
+                      <span className="h-4 w-4">💎</span>
+                      <span>Upgrade Storage</span>
+                    </Link>
                     <button
                       onClick={handleLogout}
                       className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center space-x-2"
@@ -160,6 +170,7 @@ export default function NavbarComponent({ searchQuery = "", setSearchQuery = () 
         {isMobileMenuOpen && (
           <div className="md:hidden border-t border-gray-200 py-3 animate-slide-down">
             <div className="space-y-3">
+              {/* Mobile Search */}
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <Search className="h-5 w-5 text-gray-400" />
@@ -169,17 +180,18 @@ export default function NavbarComponent({ searchQuery = "", setSearchQuery = () 
                   value={searchQuery}
                   onChange={handleSearch}
                   placeholder="Search files..."
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
                 {searchQuery && (
                   <button
-                    onClick={() => setSearchQuery("")}
-                    className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                    onClick={clearSearch}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
                   >
-                    <X className="h-4 w-4 text-gray-400 hover:text-gray-600" />
+                    <X className="h-5 w-5" />
                   </button>
                 )}
               </div>
+              
               {currentUser && (
                 <div className="space-y-2">
                   <button
@@ -189,18 +201,13 @@ export default function NavbarComponent({ searchQuery = "", setSearchQuery = () 
                     <User className="h-5 w-5" />
                     <span>Profile</span>
                   </button>
-                  <button
-                    onClick={() => {
-                      setIsMobileMenuOpen(false);
-                      window.location.href = "/upgrade";
-                    }}
+                  <Link
+                    to="/upgrade"
                     className="w-full text-left px-4 py-2 text-green-600 hover:bg-green-50 rounded-lg flex items-center space-x-2"
                   >
-                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                    </svg>
-                    <span>Upgrade Plan</span>
-                  </button>
+                    <span className="h-5 w-5">💎</span>
+                    <span>Upgrade Storage</span>
+                  </Link>
                   <button
                     onClick={handleLogout}
                     className="w-full text-left px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg flex items-center space-x-2"
