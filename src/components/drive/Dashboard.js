@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-import { Link } from "react-router-dom";
 import { useParams, useLocation } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 import { useFolder } from "../../hooks/useFolder";
@@ -9,8 +8,9 @@ import File from "./File";
 import AddFolderButton from "./AddFolderButton";
 import AddFileButton from "./AddFileButton";
 import FolderBreadcrumbs from "./FolderBreadcrumbs";
-import { database } from "../../firebase"; // Import database
-import { deleteFileFromCloudinary } from "../../cloudinary"; // Import Cloudinary delete function
+import { database } from "../../firebase";
+import { deleteFileFromCloudinary } from "../../cloudinary";
+import { Link } from "react-router-dom"; // Added missing import
 import {
   FolderPlus,
   Upload,
@@ -29,6 +29,8 @@ export default function Dashboard() {
   const { folderId } = useParams();
   const { state = {} } = useLocation();
   const { folder, childFolders, childFiles } = useFolder(folderId, state.folder);
+  const { currentUser } = useAuth(); // Added this line - FIXED 'currentUser is not defined'
+  
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [selectedFolders, setSelectedFolders] = useState([]);
   const [viewMode, setViewMode] = useState("grid");
@@ -37,6 +39,46 @@ export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState("");
   const [error, setError] = useState("");
   const [showSortMenu, setShowSortMenu] = useState(false);
+
+  // File type icons mapping
+  const getFileIcon = (fileName) => {
+    const extension = fileName.split('.').pop().toLowerCase();
+    if (['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp'].includes(extension)) {
+      return <span className="text-purple-500">🖼️</span>;
+    } else if (['pdf'].includes(extension)) {
+      return <span className="text-red-500">📄</span>;
+    } else if (['doc', 'docx'].includes(extension)) {
+      return <span className="text-blue-500">📝</span>;
+    } else if (['xls', 'xlsx', 'csv'].includes(extension)) {
+      return <span className="text-green-500">📊</span>;
+    } else if (['mp4', 'mov', 'avi', 'mkv'].includes(extension)) {
+      return <span className="text-red-500">🎬</span>;
+    } else if (['mp3', 'wav', 'flac'].includes(extension)) {
+      return <span className="text-yellow-500">🎵</span>;
+    } else if (['zip', 'rar', '7z', 'tar'].includes(extension)) {
+      return <span className="text-gray-500">📦</span>;
+    } else {
+      return <span className="text-gray-500">📄</span>;
+    }
+  };
+
+  // FIXED: Added handleFileSelect function
+  const handleFileSelect = (fileId) => {
+    setSelectedFiles(prev =>
+      prev.includes(fileId)
+        ? prev.filter(id => id !== fileId)
+        : [...prev, fileId]
+    );
+  };
+
+  // FIXED: Added handleFolderSelect function
+  const handleFolderSelect = (folderId) => {
+    setSelectedFolders(prev =>
+      prev.includes(folderId)
+        ? prev.filter(id => id !== folderId)
+        : [...prev, folderId]
+    );
+  };
 
   // FIXED: Enhanced delete function
   const handleDelete = async () => {
@@ -57,9 +99,9 @@ export default function Dashboard() {
       // Delete selected files
       for (const fileId of selectedFiles) {
         const file = childFiles.find((f) => f.id === fileId);
-        if (file) {
-          // Delete from Cloudinary first
+        if (file && file.url) {
           try {
+            // Try to delete from Cloudinary
             await deleteFileFromCloudinary(file.url);
           } catch (cloudinaryError) {
             console.warn("Could not delete from Cloudinary:", cloudinaryError);
@@ -81,10 +123,12 @@ export default function Dashboard() {
 
         for (const doc of folderFiles.docs) {
           const file = doc.data();
-          try {
-            await deleteFileFromCloudinary(file.url);
-          } catch (error) {
-            console.warn("Could not delete file from Cloudinary:", error);
+          if (file.url) {
+            try {
+              await deleteFileFromCloudinary(file.url);
+            } catch (error) {
+              console.warn("Could not delete file from Cloudinary:", error);
+            }
           }
           await doc.ref.delete();
         }
@@ -98,12 +142,12 @@ export default function Dashboard() {
       setSelectedFolders([]);
       
       // Show success message
-      setError("Items deleted successfully!");
+      setError("✅ Items deleted successfully!");
       setTimeout(() => setError(""), 3000);
 
     } catch (err) {
       console.error("Delete error:", err);
-      setError("Failed to delete items. Please try again.");
+      setError("❌ Failed to delete items. Please try again.");
     }
   };
 
@@ -117,6 +161,7 @@ export default function Dashboard() {
     selectedFiles.forEach((fileId) => {
       const file = childFiles.find((f) => f.id === fileId);
       if (file && file.url) {
+        // Create a hidden anchor element to trigger download
         const link = document.createElement("a");
         link.href = file.url;
         link.download = file.name || `download-${Date.now()}`;
@@ -126,6 +171,9 @@ export default function Dashboard() {
         document.body.removeChild(link);
       }
     });
+    
+    setError("✅ Download started!");
+    setTimeout(() => setError(""), 3000);
   };
 
   const handleDownloadAll = () => {
@@ -145,9 +193,12 @@ export default function Dashboard() {
         document.body.removeChild(link);
       }
     });
+    
+    setError("✅ Downloading all files!");
+    setTimeout(() => setError(""), 3000);
   };
 
-  // FIXED: Sort functionality
+  // Sort functionality
   const sortOptions = [
     { value: "name", label: "Name", icon: "A-Z" },
     { value: "date", label: "Date", icon: "📅" },
@@ -161,7 +212,7 @@ export default function Dashboard() {
     setShowSortMenu(false);
   };
 
-  // FIXED: Filter files and folders based on search
+  // Filter files and folders based on search
   const filteredFiles = childFiles.filter((file) =>
     file.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -291,7 +342,7 @@ export default function Dashboard() {
                 </button>
                 
                 {showSortMenu && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50 animate-slide-down">
                     {sortOptions.map((option) => (
                       <button
                         key={option.value}
@@ -340,9 +391,13 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Error Message */}
+        {/* Error/Success Message */}
         {error && (
-          <div className={`mb-4 p-3 rounded-lg ${error.includes("success") ? "alert-success" : "alert-danger"}`}>
+          <div className={`mb-4 p-3 rounded-lg ${
+            error.includes("✅") ? "bg-green-50 border border-green-200 text-green-700" : 
+            error.includes("❌") ? "bg-red-50 border border-red-200 text-red-700" :
+            "bg-blue-50 border border-blue-200 text-blue-700"
+          }`}>
             {error}
           </div>
         )}
@@ -378,13 +433,8 @@ export default function Dashboard() {
                     file={childFile}
                     selected={selectedFiles.includes(childFile.id)}
                     onSelect={() => handleFileSelect(childFile.id)}
+                    getFileIcon={getFileIcon}
                     viewMode={viewMode}
-                    onDownload={(url, name) => {
-                      const link = document.createElement("a");
-                      link.href = url;
-                      link.download = name;
-                      link.click();
-                    }}
                   />
                 ))}
               </div>
