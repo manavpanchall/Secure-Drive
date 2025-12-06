@@ -9,10 +9,8 @@ import {
   X,
   Search,
   ChevronDown,
-  Bell,
   Settings,
   HelpCircle,
-  Zap,
   Sparkles,
 } from "lucide-react";
 
@@ -22,7 +20,6 @@ export default function NavbarComponent({ onSearch }) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [hasNotifications, setHasNotifications] = useState(true);
   const [scrolled, setScrolled] = useState(false);
 
   // Handle scroll effect
@@ -59,10 +56,6 @@ export default function NavbarComponent({ onSearch }) {
     }
   };
 
-  const clearNotifications = () => {
-    setHasNotifications(false);
-  };
-
   return (
     <nav className={`sticky top-0 z-50 transition-all duration-300 ${
       scrolled 
@@ -87,38 +80,10 @@ export default function NavbarComponent({ onSearch }) {
                 <span className="text-xs text-gray-500 -mt-1">Cloud Storage</span>
               </div>
             </Link>
-
-            {/* Desktop Navigation */}
-            <div className="hidden md:flex items-center space-x-1 ml-8">
-              <Link 
-                to="/" 
-                className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50 rounded-lg transition-colors"
-              >
-                Dashboard
-              </Link>
-              <Link 
-                to="/recent" 
-                className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50 rounded-lg transition-colors"
-              >
-                Recent
-              </Link>
-              <Link 
-                to="/shared" 
-                className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50 rounded-lg transition-colors"
-              >
-                Shared
-              </Link>
-              <Link 
-                to="/starred" 
-                className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50 rounded-lg transition-colors"
-              >
-                Starred
-              </Link>
-            </div>
           </div>
 
-          {/* Center: Search bar */}
-          <div className="flex-1 max-w-2xl mx-8 hidden lg:block">
+          {/* Center: Search bar - Now always visible on desktop */}
+          <div className="flex-1 max-w-2xl mx-4 lg:mx-8">
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <Search className="h-5 w-5 text-gray-400" />
@@ -141,30 +106,8 @@ export default function NavbarComponent({ onSearch }) {
             </div>
           </div>
 
-          {/* Right side: Actions and User menu */}
+          {/* Right side: User menu */}
           <div className="flex items-center space-x-3">
-            {/* Notifications */}
-            <div className="relative">
-              <button 
-                onClick={clearNotifications}
-                className="p-2 rounded-xl hover:bg-gray-100 relative transition-colors"
-              >
-                <Bell className="h-5 w-5 text-gray-600" />
-                {hasNotifications && (
-                  <span className="absolute top-1.5 right-1.5 h-2 w-2 bg-red-500 rounded-full animate-pulse"></span>
-                )}
-              </button>
-            </div>
-
-            {/* Upgrade Button */}
-            <Link 
-              to="/upgrade"
-              className="hidden md:flex items-center space-x-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white px-4 py-2 rounded-xl font-medium shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5"
-            >
-              <Zap className="h-4 w-4" />
-              <span>Upgrade</span>
-            </Link>
-
             {/* Mobile menu button */}
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
@@ -260,39 +203,39 @@ export default function NavbarComponent({ onSearch }) {
                         <span>Profile</span>
                       </button>
                       
-                      <Link
-                        to="/settings"
-                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center space-x-3 group"
-                      >
-                        <div className="p-1.5 rounded-lg bg-gray-100 group-hover:bg-primary-50 transition-colors">
-                          <Settings className="h-4 w-4 text-gray-600 group-hover:text-primary-600" />
+                      {/* Settings - Unclickable */}
+                      <div className="w-full text-left px-4 py-2.5 text-sm text-gray-400 flex items-center space-x-3 group cursor-not-allowed opacity-60">
+                        <div className="p-1.5 rounded-lg bg-gray-100">
+                          <Settings className="h-4 w-4 text-gray-400" />
                         </div>
                         <span>Settings</span>
-                      </Link>
+                        <span className="text-xs text-gray-400 ml-auto">Coming Soon</span>
+                      </div>
                       
-                      <Link
-                        to="/help"
-                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center space-x-3 group"
-                      >
-                        <div className="p-1.5 rounded-lg bg-gray-100 group-hover:bg-primary-50 transition-colors">
-                          <HelpCircle className="h-4 w-4 text-gray-600 group-hover:text-primary-600" />
+                      {/* Help & Support - Unclickable */}
+                      <div className="w-full text-left px-4 py-2.5 text-sm text-gray-400 flex items-center space-x-3 group cursor-not-allowed opacity-60">
+                        <div className="p-1.5 rounded-lg bg-gray-100">
+                          <HelpCircle className="h-4 w-4 text-gray-400" />
                         </div>
                         <span>Help & Support</span>
-                      </Link>
+                        <span className="text-xs text-gray-400 ml-auto">Coming Soon</span>
+                      </div>
 
+                      {/* Upgrade Section */}
                       <div className="px-4 py-2.5 mt-1">
-                        <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-lg p-3">
+                        <div className="bg-gradient-to-r from-primary-50 to-blue-50 border border-primary-200 rounded-lg p-3">
                           <div className="flex items-center space-x-2 mb-1">
-                            <Sparkles className="h-4 w-4 text-amber-600" />
-                            <span className="text-xs font-semibold text-amber-800">Upgrade to Pro</span>
+                            <Sparkles className="h-4 w-4 text-primary-600" />
+                            <span className="text-xs font-semibold text-primary-800">Upgrade Storage</span>
                           </div>
-                          <p className="text-xs text-amber-700 mb-2">Get 100GB storage & premium features</p>
+                          <p className="text-xs text-primary-700 mb-2">Get more space & premium features</p>
                           <Link
                             to="/upgrade"
-                            className="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white text-xs font-semibold py-1.5 px-3 rounded-lg flex items-center justify-center space-x-1 transition-all duration-200"
+                            className="w-full bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white text-xs font-semibold py-1.5 px-3 rounded-lg flex items-center justify-center space-x-1 transition-all duration-200"
+                            onClick={() => setIsProfileDropdownOpen(false)}
                           >
-                            <Zap className="h-3 w-3" />
-                            <span>Upgrade Now</span>
+                            <span className="h-3 w-3">⚡</span>
+                            <span>View Plans</span>
                           </Link>
                         </div>
                       </div>
@@ -317,73 +260,52 @@ export default function NavbarComponent({ onSearch }) {
           </div>
         </div>
 
-        {/* Mobile menu */}
+        {/* Mobile menu - Simplified */}
         {isMobileMenuOpen && (
           <div className="md:hidden border-t border-gray-100 py-3 animate-slide-down">
             <div className="space-y-3">
-              {/* Mobile Search */}
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Search className="h-5 w-5 text-gray-400" />
-                </div>
-                <input
-                  type="search"
-                  value={searchQuery}
-                  onChange={handleSearch}
-                  placeholder="Search files..."
-                  className="w-full pl-10 pr-10 py-2.5 bg-gray-50/70 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500"
-                />
-                {searchQuery && (
+              {currentUser && (
+                <div className="space-y-2">
                   <button
-                    onClick={clearSearch}
-                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+                    onClick={handleProfileClick}
+                    className="w-full text-left px-4 py-2.5 text-gray-700 hover:bg-gray-50 rounded-xl flex items-center space-x-3"
+                    onClick={() => setIsMobileMenuOpen(false)}
                   >
-                    <X className="h-5 w-5" />
+                    <User className="h-5 w-5" />
+                    <span>Profile</span>
                   </button>
-                )}
-              </div>
-              
-              {/* Mobile Navigation */}
-              <div className="grid grid-cols-2 gap-2">
-                <Link 
-                  to="/" 
-                  className="px-4 py-2.5 text-sm font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50 rounded-xl text-center transition-colors"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                >
-                  Dashboard
-                </Link>
-                <Link 
-                  to="/recent" 
-                  className="px-4 py-2.5 text-sm font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50 rounded-xl text-center transition-colors"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                >
-                  Recent
-                </Link>
-                <Link 
-                  to="/shared" 
-                  className="px-4 py-2.5 text-sm font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50 rounded-xl text-center transition-colors"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                >
-                  Shared
-                </Link>
-                <Link 
-                  to="/starred" 
-                  className="px-4 py-2.5 text-sm font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50 rounded-xl text-center transition-colors"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                >
-                  Starred
-                </Link>
-              </div>
-              
-              {/* Upgrade button for mobile */}
-              <Link 
-                to="/upgrade"
-                className="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white px-4 py-2.5 rounded-xl font-medium shadow-lg flex items-center justify-center space-x-2 transition-all duration-200"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                <Zap className="h-4 w-4" />
-                <span>Upgrade to Pro</span>
-              </Link>
+                  
+                  <div className="w-full text-left px-4 py-2.5 text-gray-400 rounded-xl flex items-center space-x-3 cursor-not-allowed opacity-60">
+                    <Settings className="h-5 w-5" />
+                    <span>Settings</span>
+                    <span className="text-xs text-gray-400 ml-auto">Coming Soon</span>
+                  </div>
+                  
+                  <div className="w-full text-left px-4 py-2.5 text-gray-400 rounded-xl flex items-center space-x-3 cursor-not-allowed opacity-60">
+                    <HelpCircle className="h-5 w-5" />
+                    <span>Help & Support</span>
+                    <span className="text-xs text-gray-400 ml-auto">Coming Soon</span>
+                  </div>
+                  
+                  <Link
+                    to="/upgrade"
+                    className="w-full text-left px-4 py-2.5 text-primary-600 hover:bg-primary-50 rounded-xl flex items-center space-x-3"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    <span className="h-5 w-5">⚡</span>
+                    <span>Upgrade Storage</span>
+                  </Link>
+                  
+                  <button
+                    onClick={handleLogout}
+                    className="w-full text-left px-4 py-2.5 text-red-600 hover:bg-red-50 rounded-xl flex items-center space-x-3"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    <LogOut className="h-5 w-5" />
+                    <span>Log Out</span>
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}

@@ -7,7 +7,7 @@ import Login from "./authentication/Login";
 import Signup from "./authentication/Signup";
 import ForgotPassword from "./authentication/ForgotPassword";
 import UpdateProfile from "./authentication/UpdateProfile";
-import UpgradePlan from "./authentication/UpgradePlan"; // Add this import
+import UpgradePlan from "./authentication/UpgradePlan"; 
 import Dashboard from "./drive/Dashboard";
 
 function App() {

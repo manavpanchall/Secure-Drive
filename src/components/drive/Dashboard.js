@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react"; // ✅ Added useEffect
 import { useParams, useLocation } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 import { useFolder } from "../../hooks/useFolder";
@@ -10,7 +10,7 @@ import AddFileButton from "./AddFileButton";
 import FolderBreadcrumbs from "./FolderBreadcrumbs";
 import { database } from "../../firebase";
 import { deleteFileFromCloudinary } from "../../cloudinary";
-import { Link } from "react-router-dom"; // Added missing import
+import { Link } from "react-router-dom";
 import {
   FolderPlus,
   Upload,
@@ -23,14 +23,17 @@ import {
   HardDrive,
   Folder as FolderIcon,
   File as FileIcon,
+  Zap,
+  Sparkles,
+  Plus
 } from "lucide-react";
 
 export default function Dashboard() {
   const { folderId } = useParams();
   const { state = {} } = useLocation();
   const { folder, childFolders, childFiles } = useFolder(folderId, state.folder);
-  const { currentUser } = useAuth(); // Added this line - FIXED 'currentUser is not defined'
-
+  const { currentUser } = useAuth();
+  
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [selectedFolders, setSelectedFolders] = useState([]);
   const [viewMode, setViewMode] = useState("grid");
@@ -39,6 +42,11 @@ export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState("");
   const [error, setError] = useState("");
   const [showSortMenu, setShowSortMenu] = useState(false);
+  const [isFloatingMenuOpen, setIsFloatingMenuOpen] = useState(false);
+  
+  // Add sorting functionality
+  const [sortedFiles, setSortedFiles] = useState([]);
+  const [sortedFolders, setSortedFolders] = useState([]);
 
   // File type icons mapping
   const getFileIcon = (fileName) => {
@@ -62,7 +70,54 @@ export default function Dashboard() {
     }
   };
 
-  // FIXED: Added handleFileSelect function
+  // ✅ Apply sorting whenever files/folders or sort criteria change
+  useEffect(() => {
+    const sortItems = (items) => {
+      if (!items.length) return items;
+      
+      return [...items].sort((a, b) => {
+        switch (sortBy) {
+          case 'name':
+            return sortOrder === 'asc' 
+              ? a.name.localeCompare(b.name)
+              : b.name.localeCompare(a.name);
+            
+          case 'date':
+            const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0);
+            const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0);
+            return sortOrder === 'asc' 
+              ? dateA - dateB
+              : dateB - dateA;
+            
+          case 'size':
+            const sizeA = a.size || 0;
+            const sizeB = b.size || 0;
+            return sortOrder === 'asc' 
+              ? sizeA - sizeB
+              : sizeB - sizeA;
+            
+          case 'type':
+            const typeA = a.name.split('.').pop() || '';
+            const typeB = b.name.split('.').pop() || '';
+            return sortOrder === 'asc' 
+              ? typeA.localeCompare(typeB)
+              : typeB.localeCompare(typeA);
+            
+          default:
+            return 0;
+        }
+      });
+    };
+
+    setSortedFiles(sortItems(childFiles.filter((file) =>
+      file.name.toLowerCase().includes(searchQuery.toLowerCase())
+    )));
+    
+    setSortedFolders(sortItems(childFolders.filter((folder) =>
+      folder.name.toLowerCase().includes(searchQuery.toLowerCase())
+    )));
+  }, [childFiles, childFolders, searchQuery, sortBy, sortOrder]);
+
   const handleFileSelect = (fileId) => {
     setSelectedFiles(prev =>
       prev.includes(fileId)
@@ -71,7 +126,6 @@ export default function Dashboard() {
     );
   };
 
-  // FIXED: Added handleFolderSelect function
   const handleFolderSelect = (folderId) => {
     setSelectedFolders(prev =>
       prev.includes(folderId)
@@ -80,7 +134,6 @@ export default function Dashboard() {
     );
   };
 
-  // FIXED: Enhanced delete function
   const handleDelete = async () => {
     if (selectedFiles.length === 0 && selectedFolders.length === 0) {
       setError("Please select items to delete");
@@ -90,7 +143,7 @@ export default function Dashboard() {
     const confirmDelete = window.confirm(
       `Are you sure you want to delete ${selectedFiles.length + selectedFolders.length} item(s)?`
     );
-
+    
     if (!confirmDelete) return;
 
     try {
@@ -101,21 +154,17 @@ export default function Dashboard() {
         const file = childFiles.find((f) => f.id === fileId);
         if (file && file.url) {
           try {
-            // Try to delete from Cloudinary
             await deleteFileFromCloudinary(file.url);
           } catch (cloudinaryError) {
             console.warn("Could not delete from Cloudinary:", cloudinaryError);
-            // Continue with Firestore deletion even if Cloudinary fails
           }
 
-          // Delete from Firestore
           await database.files.doc(fileId).delete();
         }
       }
 
-      // Delete selected folders (and their contents)
+      // Delete selected folders
       for (const folderId of selectedFolders) {
-        // First, delete all files in the folder
         const folderFiles = await database.files
           .where("folderId", "==", folderId)
           .where("userId", "==", currentUser.uid)
@@ -133,15 +182,12 @@ export default function Dashboard() {
           await doc.ref.delete();
         }
 
-        // Delete the folder itself
         await database.folders.doc(folderId).delete();
       }
 
-      // Clear selections
       setSelectedFiles([]);
       setSelectedFolders([]);
-
-      // Show success message
+      
       setError("✅ Items deleted successfully!");
       setTimeout(() => setError(""), 3000);
 
@@ -151,7 +197,6 @@ export default function Dashboard() {
     }
   };
 
-  // FIXED: Enhanced download function
   const handleDownloadSelected = () => {
     if (selectedFiles.length === 0) {
       setError("Please select files to download");
@@ -161,7 +206,6 @@ export default function Dashboard() {
     selectedFiles.forEach((fileId) => {
       const file = childFiles.find((f) => f.id === fileId);
       if (file && file.url) {
-        // Create a hidden anchor element to trigger download
         const link = document.createElement("a");
         link.href = file.url;
         link.download = file.name || `download-${Date.now()}`;
@@ -171,7 +215,7 @@ export default function Dashboard() {
         document.body.removeChild(link);
       }
     });
-
+    
     setError("✅ Download started!");
     setTimeout(() => setError(""), 3000);
   };
@@ -193,12 +237,11 @@ export default function Dashboard() {
         document.body.removeChild(link);
       }
     });
-
+    
     setError("✅ Downloading all files!");
     setTimeout(() => setError(""), 3000);
   };
 
-  // Sort functionality
   const sortOptions = [
     { value: "name", label: "Name", icon: "A-Z" },
     { value: "date", label: "Date", icon: "📅" },
@@ -212,304 +255,269 @@ export default function Dashboard() {
     setShowSortMenu(false);
   };
 
-  // Filter files and folders based on search
-  const filteredFiles = childFiles.filter((file) =>
-    file.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const filteredFolders = childFolders.filter((folder) =>
-    folder.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  // Calculate storage stats
   const storageStats = {
-    used: 2.5, // GB
-    total: 15, // GB
+    used: 2.5,
+    total: 15,
     percentage: (2.5 / 15) * 100,
   };
-
-  // Update the return section of Dashboard.js with this beautiful UI:
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-blue-50/30">
       <Navbar onSearch={(query) => setSearchQuery(query)} />
-
+      
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Welcome Header */}
+        {/* Welcome Header - Simplified */}
         <div className="mb-8">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <h1 className="text-2xl md:text-3xl font-bold text-gray-900 font-display">
-                Welcome back, <span className="gradient-text">{currentUser?.displayName?.split(' ')[0] || 'User'}</span>!
-              </h1>
-              <p className="text-gray-600 mt-1">Your files are securely stored in the cloud</p>
-            </div>
-            <div className="flex items-center space-x-3">
-              <div className="hidden sm:block bg-gradient-to-r from-primary-50 to-blue-50 border border-primary-100 rounded-xl px-4 py-2">
-                <div className="flex items-center space-x-2">
-                  <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse"></div>
-                  <span className="text-sm font-medium text-gray-700">All systems operational</span>
-                </div>
-              </div>
-              <button className="btn-secondary flex items-center space-x-2">
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                </svg>
-                <span>Quick Actions</span>
-              </button>
-            </div>
+          <div className="flex flex-col">
+            <h1 className="text-2xl md:text-3xl font-bold text-gray-900 font-display">
+              Welcome back, <span className="gradient-text">{currentUser?.displayName?.split(' ')[0] || 'User'}</span>!
+            </h1>
+            <p className="text-gray-600 mt-1">Manage your files and folders</p>
           </div>
         </div>
 
-        {/* Storage Stats with Enhanced Design */}
-        <div className="mb-8">
-          <div className="bg-gradient-to-r from-white to-blue-50/50 rounded-2xl shadow-soft border border-white/50 p-6 backdrop-blur-sm">
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-              <div className="flex-1">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center space-x-3">
-                    <div className="p-2.5 bg-gradient-to-br from-primary-500 to-primary-600 rounded-xl shadow-lg">
-                      <HardDrive className="h-6 w-6 text-white" />
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900">Storage Overview</h3>
-                      <p className="text-sm text-gray-600">Your cloud storage usage</p>
-                    </div>
-                  </div>
-                  <Link
-                    to="/upgrade"
-                    className="hidden lg:flex items-center space-x-2 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white px-4 py-2 rounded-xl font-medium shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5"
-                  >
-                    <Zap className="h-4 w-4" />
-                    <span>Upgrade Storage</span>
-                  </Link>
+        {/* Storage Stats & Quick Stats Combined - Made Responsive */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+          {/* Storage Stats Card */}
+          <div className="lg:col-span-2 bg-gradient-to-r from-white to-blue-50/50 rounded-2xl shadow-soft border border-white/50 p-6 backdrop-blur-sm">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center space-x-3">
+                <div className="p-2.5 bg-gradient-to-br from-primary-500 to-primary-600 rounded-xl shadow-lg">
+                  <HardDrive className="h-6 w-6 text-white" />
                 </div>
-
-                <div className="space-y-4">
-                  <div>
-                    <div className="flex justify-between text-sm mb-2">
-                      <span className="font-medium text-gray-700">Used: {storageStats.used} GB</span>
-                      <span className="text-gray-600">Total: {storageStats.total} GB</span>
-                    </div>
-                    <div className="relative">
-                      <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-gradient-to-r from-primary-400 via-primary-500 to-primary-600 rounded-full transition-all duration-1000 ease-out"
-                          style={{ width: `${storageStats.percentage}%` }}
-                        >
-                          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-gradient"></div>
-                        </div>
-                      </div>
-                      <div
-                        className="absolute top-0 h-3 w-0.5 bg-white shadow-lg"
-                        style={{ left: `${storageStats.percentage}%` }}
-                      ></div>
-                    </div>
-                    <div className="flex justify-between mt-2 text-xs text-gray-500">
-                      <span>Free: {storageStats.total - storageStats.used} GB</span>
-                      <span className="font-medium text-primary-600">{Math.round(storageStats.percentage)}% used</span>
-                    </div>
-                  </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Storage Overview</h3>
+                  <p className="text-sm text-gray-600">{storageStats.used} GB of {storageStats.total} GB used</p>
                 </div>
               </div>
-
-              {/* Quick Stats - Modern Design */}
-              <div className="grid grid-cols-3 gap-4 lg:w-96">
-                <div className="card-glass">
-                  <div className="flex items-center space-x-3">
-                    <div className="p-2 bg-blue-100/50 rounded-lg">
-                      <FolderIcon className="h-5 w-5 text-blue-600" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600">Folders</p>
-                      <p className="text-2xl font-bold text-gray-900">{childFolders.length}</p>
-                    </div>
-                  </div>
+              <Link 
+                to="/upgrade" 
+                className="hidden lg:flex items-center space-x-2 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white px-4 py-2 rounded-xl font-medium shadow-lg hover:shadow-xl transition-all duration-300"
+              >
+                <span className="h-4 w-4">⚡</span>
+                <span>Upgrade</span>
+              </Link>
+            </div>
+            
+            <div className="relative mb-2">
+              <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-gradient-to-r from-primary-400 via-primary-500 to-primary-600 rounded-full transition-all duration-1000 ease-out"
+                  style={{ width: `${storageStats.percentage}%` }}
+                >
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-gradient"></div>
                 </div>
+              </div>
+              <div 
+                className="absolute top-0 h-3 w-0.5 bg-white shadow-lg"
+                style={{ left: `${storageStats.percentage}%` }}
+              ></div>
+            </div>
+            <div className="flex justify-between text-xs text-gray-500">
+              <span>Free: {storageStats.total - storageStats.used} GB</span>
+              <span className="font-medium text-primary-600">{Math.round(storageStats.percentage)}% used</span>
+            </div>
+            
+            {/* Mobile Upgrade Button */}
+            <div className="mt-4 lg:hidden">
+              <Link 
+                to="/upgrade" 
+                className="w-full btn-primary flex items-center justify-center space-x-2"
+              >
+                <span className="h-4 w-4">⚡</span>
+                <span>Upgrade Storage</span>
+              </Link>
+            </div>
+          </div>
 
-                <div className="card-glass">
-                  <div className="flex items-center space-x-3">
-                    <div className="p-2 bg-green-100/50 rounded-lg">
-                      <FileIcon className="h-5 w-5 text-green-600" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600">Files</p>
-                      <p className="text-2xl font-bold text-gray-900">{childFiles.length}</p>
-                    </div>
-                  </div>
+          {/* Quick Stats - Made Responsive */}
+          <div className="grid grid-cols-3 gap-4">
+            <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-soft border border-white/50 p-4 transition-all duration-300 hover:shadow-hard">
+              <div className="flex items-center space-x-3">
+                <div className="p-2 bg-blue-100/50 rounded-lg">
+                  <FolderIcon className="h-5 w-5 text-blue-600" />
                 </div>
-
-                <div className="card-glass">
-                  <div className="flex items-center space-x-3">
-                    <div className="p-2 bg-purple-100/50 rounded-lg">
-                      <Upload className="h-5 w-5 text-purple-600" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600">Storage</p>
-                      <p className="text-2xl font-bold text-gray-900">{storageStats.used} GB</p>
-                    </div>
-                  </div>
+                <div>
+                  <p className="text-xs text-gray-600">Folders</p>
+                  <p className="text-xl font-bold text-gray-900">{childFolders.length}</p>
                 </div>
               </div>
             </div>
-
-            {/* Mobile Upgrade Button */}
-            <div className="mt-6 lg:hidden">
-              <Link
-                to="/upgrade"
-                className="w-full btn-primary flex items-center justify-center space-x-2"
-              >
-                <Zap className="h-4 w-4" />
-                <span>Upgrade Storage</span>
-              </Link>
+            
+            <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-soft border border-white/50 p-4 transition-all duration-300 hover:shadow-hard">
+              <div className="flex items-center space-x-3">
+                <div className="p-2 bg-green-100/50 rounded-lg">
+                  <FileIcon className="h-5 w-5 text-green-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-gray-600">Files</p>
+                  <p className="text-xl font-bold text-gray-900">{childFiles.length}</p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-soft border border-white/50 p-4 transition-all duration-300 hover:shadow-hard">
+              <div className="flex items-center space-x-3">
+                <div className="p-2 bg-purple-100/50 rounded-lg">
+                  <Upload className="h-5 w-5 text-purple-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-gray-600">Storage</p>
+                  <p className="text-xl font-bold text-gray-900">{storageStats.used} GB</p>
+                </div>
+              </div>
             </div>
           </div>
         </div>
 
         {/* Main Content Area */}
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Sidebar - File Actions */}
-          <div className="lg:col-span-1">
-            <div className="card space-y-4 sticky top-24">
-              <h3 className="font-semibold text-gray-900 text-lg">Quick Actions</h3>
-
-              <div className="space-y-2">
-                <AddFileButton currentFolder={folder} />
-                <AddFolderButton currentFolder={folder} />
-
-                <button
-                  onClick={handleDownloadAll}
-                  disabled={childFiles.length === 0}
-                  className="w-full btn-secondary flex items-center justify-center space-x-2"
-                >
-                  <Download className="h-4 w-4" />
-                  <span>Download All</span>
-                </button>
-
-                <button
-                  onClick={() => {
-                    setSelectedFiles(childFiles.map(f => f.id));
-                    setSelectedFolders(childFolders.map(f => f.id));
-                  }}
-                  disabled={childFiles.length === 0 && childFolders.length === 0}
-                  className="w-full btn-secondary flex items-center justify-center space-x-2"
-                >
-                  <span>📋</span>
-                  <span>Select All</span>
-                </button>
-              </div>
-
-              <div className="pt-4 border-t border-gray-100">
-                <h4 className="font-medium text-gray-900 mb-3">View Options</h4>
-                <div className="flex space-x-2">
+          {/* Left Sidebar - Improved UI */}
+          <div className="lg:col-span-1 space-y-6">
+            {/* File Actions Card - Improved Design */}
+            <div className="card">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold text-gray-900">File Actions</h3>
+                <div className="flex items-center space-x-2">
                   <button
                     onClick={() => setViewMode("grid")}
-                    className={`flex-1 py-2.5 rounded-lg flex items-center justify-center space-x-2 ${viewMode === "grid"
-                        ? "bg-primary-50 text-primary-600 border border-primary-200"
-                        : "text-gray-600 hover:bg-gray-50 border border-gray-200"
-                      }`}
+                    className={`p-2 rounded-lg ${viewMode === "grid" ? "bg-primary-100 text-primary-600" : "text-gray-500 hover:text-gray-700"}`}
+                    title="Grid View"
                   >
                     <Grid className="h-4 w-4" />
-                    <span className="text-sm">Grid</span>
                   </button>
                   <button
                     onClick={() => setViewMode("list")}
-                    className={`flex-1 py-2.5 rounded-lg flex items-center justify-center space-x-2 ${viewMode === "list"
-                        ? "bg-primary-50 text-primary-600 border border-primary-200"
-                        : "text-gray-600 hover:bg-gray-50 border border-gray-200"
-                      }`}
+                    className={`p-2 rounded-lg ${viewMode === "list" ? "bg-primary-100 text-primary-600" : "text-gray-500 hover:text-gray-700"}`}
+                    title="List View"
                   >
                     <List className="h-4 w-4" />
-                    <span className="text-sm">List</span>
                   </button>
                 </div>
               </div>
-
-              <div className="pt-4 border-t border-gray-100">
-                <h4 className="font-medium text-gray-900 mb-3">Sort By</h4>
-                <div className="space-y-1">
-                  {sortOptions.map((option) => (
-                    <button
-                      key={option.value}
-                      onClick={() => handleSort(option.value)}
-                      className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between ${sortBy === option.value
-                          ? "bg-primary-50 text-primary-600"
-                          : "text-gray-600 hover:bg-gray-50"
-                        }`}
-                    >
-                      <div className="flex items-center space-x-2">
-                        <span>{option.icon}</span>
-                        <span>{option.label}</span>
-                      </div>
-                      {sortBy === option.value && (
-                        <span className="text-xs">
-                          {sortOrder === "asc" ? "↑" : "↓"}
-                        </span>
-                      )}
-                    </button>
-                  ))}
+              
+              <div className="space-y-3">
+                <AddFileButton currentFolder={folder} />
+                <AddFolderButton currentFolder={folder} />
+                
+                <div className="grid grid-cols-2 gap-2">
+                  <button 
+                    onClick={handleDownloadAll}
+                    disabled={childFiles.length === 0}
+                    className="btn-secondary flex items-center justify-center space-x-2 py-2.5 text-sm"
+                  >
+                    <Download className="h-4 w-4" />
+                    <span>Download All</span>
+                  </button>
+                  
+                  <button 
+                    onClick={() => {
+                      setSelectedFiles(childFiles.map(f => f.id));
+                      setSelectedFolders(childFolders.map(f => f.id));
+                    }}
+                    disabled={childFiles.length === 0 && childFolders.length === 0}
+                    className="btn-secondary flex items-center justify-center space-x-2 py-2.5 text-sm"
+                  >
+                    <span>📋</span>
+                    <span>Select All</span>
+                  </button>
                 </div>
               </div>
             </div>
 
-            {/* Storage Tip */}
-            <div className="card mt-6 bg-gradient-to-br from-blue-50 to-cyan-50 border border-blue-100">
-              <div className="flex items-start space-x-3">
-                <div className="p-2 bg-blue-100 rounded-lg">
-                  <Sparkles className="h-5 w-5 text-blue-600" />
-                </div>
-                <div>
-                  <h4 className="font-semibold text-blue-900">Pro Tip</h4>
-                  <p className="text-sm text-blue-700 mt-1">
-                    Organize files in folders to find them faster. Use descriptive names!
+            {/* Sort Card - Fixed Sorting */}
+            <div className="card">
+              <h4 className="font-semibold text-gray-900 mb-4">Sort Options</h4>
+              <div className="space-y-2">
+                {sortOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => handleSort(option.value)}
+                    className={`w-full text-left px-4 py-3 rounded-xl text-sm flex items-center justify-between transition-all duration-200 ${
+                      sortBy === option.value 
+                        ? "bg-gradient-to-r from-primary-50 to-blue-50 text-primary-700 border border-primary-200" 
+                        : "text-gray-600 hover:bg-gray-50 border border-gray-200"
+                    }`}
+                  >
+                    <div className="flex items-center space-x-3">
+                      <span className="text-lg">{option.icon}</span>
+                      <span>{option.label}</span>
+                    </div>
+                    {sortBy === option.value && (
+                      <span className={`text-xs font-medium ${
+                        sortOrder === "asc" ? "text-green-600" : "text-orange-600"
+                      }`}>
+                        {sortOrder === "asc" ? "A → Z" : "Z → A"}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+              
+              {/* Current Sort Info */}
+              {sortBy && (
+                <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+                  <p className="text-xs text-gray-600">
+                    Sorted by: <span className="font-medium text-gray-900">{sortOptions.find(o => o.value === sortBy)?.label}</span>
+                    <span className="mx-2">•</span>
+                    Order: <span className="font-medium text-gray-900">{sortOrder === 'asc' ? 'Ascending' : 'Descending'}</span>
                   </p>
                 </div>
-              </div>
+              )}
             </div>
+
+            {/* Selected Items Actions */}
+            {(selectedFiles.length > 0 || selectedFolders.length > 0) && (
+              <div className="card bg-gradient-to-r from-primary-50 to-blue-50 border border-primary-200">
+                <h4 className="font-semibold text-primary-900 mb-3">Selected Items</h4>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-700">Files selected:</span>
+                    <span className="font-semibold text-primary-600">{selectedFiles.length}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-700">Folders selected:</span>
+                    <span className="font-semibold text-primary-600">{selectedFolders.length}</span>
+                  </div>
+                  <div className="pt-3 border-t border-primary-200">
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={handleDownloadSelected}
+                        disabled={selectedFiles.length === 0}
+                        className="btn-primary text-sm py-2"
+                      >
+                        Download
+                      </button>
+                      <button
+                        onClick={handleDelete}
+                        className="btn-danger text-sm py-2"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Main Content - Files and Folders */}
           <div className="lg:col-span-3">
-            {/* Toolbar */}
+            {/* Toolbar - Simplified */}
             <div className="card mb-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="flex items-center space-x-4">
                   <FolderBreadcrumbs currentFolder={folder} />
-                  {(selectedFiles.length > 0 || selectedFolders.length > 0) && (
-                    <div className="flex items-center space-x-2">
-                      <span className="badge-primary">
-                        {selectedFiles.length + selectedFolders.length} selected
-                      </span>
-                      <div className="flex space-x-2">
-                        <button
-                          onClick={handleDownloadSelected}
-                          disabled={selectedFiles.length === 0}
-                          className="btn-primary text-sm px-3 py-1.5"
-                        >
-                          Download
-                        </button>
-                        <button
-                          onClick={handleDelete}
-                          disabled={selectedFiles.length === 0 && selectedFolders.length === 0}
-                          className="btn-danger text-sm px-3 py-1.5"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </div>
+                  {searchQuery && (
+                    <span className="text-sm text-gray-600 bg-gray-100 px-3 py-1 rounded-full">
+                      Search: "{searchQuery}"
+                    </span>
                   )}
                 </div>
-
+                
                 <div className="flex items-center space-x-2">
-                  <div className="relative">
-                    <button
-                      onClick={() => setShowSortMenu(!showSortMenu)}
-                      className="btn-secondary flex items-center space-x-2 text-sm"
-                    >
-                      <Filter className="h-4 w-4" />
-                      <span>Sort: {sortOptions.find(o => o.value === sortBy)?.label}</span>
-                      <ChevronDown className={`h-4 w-4 transition-transform ${showSortMenu ? "rotate-180" : ""}`} />
-                    </button>
+                  <div className="text-sm text-gray-600">
+                    {sortedFolders.length} folders • {sortedFiles.length} files
                   </div>
                 </div>
               </div>
@@ -517,10 +525,11 @@ export default function Dashboard() {
 
             {/* Error/Success Messages */}
             {error && (
-              <div className={`mb-6 p-4 rounded-xl ${error.includes("✅") ? "alert-success" :
-                  error.includes("❌") ? "alert-danger" :
-                    "alert-info"
-                }`}>
+              <div className={`mb-6 p-4 rounded-xl ${
+                error.includes("✅") ? "alert-success" : 
+                error.includes("❌") ? "alert-danger" :
+                "alert-info"
+              }`}>
                 <div className="flex items-center space-x-3">
                   {error.includes("✅") ? (
                     <div className="h-8 w-8 bg-green-100 rounded-full flex items-center justify-center">
@@ -545,14 +554,14 @@ export default function Dashboard() {
             {/* Content Area */}
             <div className="space-y-8">
               {/* Folders Section */}
-              {filteredFolders.length > 0 && (
+              {sortedFolders.length > 0 && (
                 <div>
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="text-xl font-bold text-gray-900 font-display">Folders</h2>
-                    <span className="text-sm text-gray-500">{filteredFolders.length} items</span>
+                    <span className="text-sm text-gray-500">{sortedFolders.length} items</span>
                   </div>
                   <div className={`${viewMode === "grid" ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" : "space-y-3"}`}>
-                    {filteredFolders.map(childFolder => (
+                    {sortedFolders.map(childFolder => (
                       <Folder
                         key={childFolder.id}
                         folder={childFolder}
@@ -566,14 +575,14 @@ export default function Dashboard() {
               )}
 
               {/* Files Section */}
-              {filteredFiles.length > 0 && (
+              {sortedFiles.length > 0 && (
                 <div>
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="text-xl font-bold text-gray-900 font-display">Files</h2>
-                    <span className="text-sm text-gray-500">{filteredFiles.length} items</span>
+                    <span className="text-sm text-gray-500">{sortedFiles.length} items</span>
                   </div>
                   <div className={`${viewMode === "grid" ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" : "space-y-3"}`}>
-                    {filteredFiles.map(childFile => (
+                    {sortedFiles.map(childFile => (
                       <File
                         key={childFile.id}
                         file={childFile}
@@ -588,16 +597,16 @@ export default function Dashboard() {
               )}
 
               {/* Empty State */}
-              {filteredFolders.length === 0 && filteredFiles.length === 0 && (
+              {sortedFolders.length === 0 && sortedFiles.length === 0 && (
                 <div className="text-center py-16">
-                  <div className="mx-auto w-32 h-32 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center mb-6 animate-float">
+                  <div className="mx-auto w-32 h-32 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center mb-6">
                     <FolderPlus className="h-16 w-16 text-gray-400" />
                   </div>
                   <h3 className="text-2xl font-bold text-gray-900 mb-3 font-display">
                     {searchQuery ? "No results found" : "Your space is empty"}
                   </h3>
                   <p className="text-gray-600 mb-8 max-w-md mx-auto">
-                    {searchQuery
+                    {searchQuery 
                       ? `We couldn't find any files or folders matching "${searchQuery}"`
                       : "Upload your first file or create a folder to get started. Your files will be securely stored and accessible from anywhere."}
                   </p>
@@ -621,31 +630,33 @@ export default function Dashboard() {
                 <button
                   onClick={handleDownloadSelected}
                   disabled={selectedFiles.length === 0}
-                  className="btn-primary shadow-lg"
+                  className="btn-primary shadow-lg p-3 rounded-full"
                 >
                   <Download className="h-5 w-5" />
                 </button>
                 <button
                   onClick={handleDelete}
                   disabled={selectedFiles.length === 0 && selectedFolders.length === 0}
-                  className="btn-danger shadow-lg"
+                  className="btn-danger shadow-lg p-3 rounded-full"
                 >
                   <Trash2 className="h-5 w-5" />
                 </button>
               </div>
             )}
-            <button
+            <button 
               onClick={() => setIsFloatingMenuOpen(!isFloatingMenuOpen)}
-              className="bg-gradient-to-r from-primary-500 to-primary-600 text-white p-4 rounded-full shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1"
+              className="bg-gradient-to-r from-primary-500 to-primary-600 text-white p-4 rounded-full shadow-xl hover:shadow-2xl transition-all duration-300"
             >
               <Plus className="h-6 w-6" />
             </button>
           </div>
-
+          
           {isFloatingMenuOpen && (
             <div className="space-y-2 animate-slide-up">
-              <AddFileButton currentFolder={folder} />
-              <AddFolderButton currentFolder={folder} />
+              <div className="bg-white rounded-xl shadow-hard p-2">
+                <AddFileButton currentFolder={folder} />
+                <AddFolderButton currentFolder={folder} />
+              </div>
             </div>
           )}
         </div>
