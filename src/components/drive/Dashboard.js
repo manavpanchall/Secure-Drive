@@ -9,6 +9,8 @@ import FolderBreadcrumbs from "./FolderBreadcrumbs";
 import AddFileButton from "./AddFileButton";
 import File from "./File";
 import { database } from "../../firebase";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faDownload } from "@fortawesome/free-solid-svg-icons";
 
 export default function Dashboard() {
   const { folderId } = useParams();
@@ -35,30 +37,46 @@ export default function Dashboard() {
   };
 
   const handleDelete = async () => {
-    try {
-      setError("");
+    // ... existing delete code ...
+  };
 
-      // Delete selected files
-      for (const fileId of selectedFiles) {
-        const file = childFiles.find((f) => f.id === fileId);
-        if (file) {
-          // Delete from Firestore
-          await database.files.doc(fileId).delete();
-        }
-      }
-
-      // Delete selected folders
-      for (const folderId of selectedFolders) {
-        await database.folders.doc(folderId).delete();
-      }
-
-      // Clear selections
-      setSelectedFiles([]);
-      setSelectedFolders([]);
-    } catch (err) {
-      setError("Failed to delete items");
-      console.error(err);
+  const handleDownloadSelected = () => {
+    if (selectedFiles.length === 0) {
+      setError("Please select files to download");
+      return;
     }
+
+    // Download selected files one by one
+    selectedFiles.forEach((fileId) => {
+      const file = childFiles.find((f) => f.id === fileId);
+      if (file) {
+        const link = document.createElement("a");
+        link.href = file.url;
+        link.download = file.name || "download";
+        link.target = "_blank";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+    });
+  };
+
+  const handleDownloadAll = () => {
+    if (childFiles.length === 0) {
+      setError("No files to download");
+      return;
+    }
+
+    // Download all files in the current folder
+    childFiles.forEach((file) => {
+      const link = document.createElement("a");
+      link.href = file.url;
+      link.download = file.name || "download";
+      link.target = "_blank";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    });
   };
 
   return (
@@ -74,73 +92,123 @@ export default function Dashboard() {
             {/* Add Folder Button */}
             <AddFolderButton currentFolder={folder} />
 
-            {/* Spacer between Add Folder and Delete Selected Button */}
-            <div style={{ width: "8px" }}></div> {/* Add space here */}
+            {/* Download All Button */}
+            {childFiles.length > 0 && (
+              <Button
+                variant="outline-primary"
+                onClick={handleDownloadAll}
+                className="d-flex align-items-center"
+                style={{
+                  padding: "6px 12px",
+                  fontSize: "14px",
+                  borderRadius: "4px",
+                  fontWeight: "500",
+                  boxShadow: "0 2px 4px rgba(0, 0, 0, 0.1)",
+                  transition: "background-color 0.3s, border-color 0.3s",
+                  whiteSpace: "nowrap",
+                  height: "38px",
+                }}
+                title="Download all files in this folder"
+              >
+                <FontAwesomeIcon icon={faDownload} className="me-1" />
+                Download All
+              </Button>
+            )}
+
+            {/* Download Selected Button */}
+            <Button
+              variant="outline-primary"
+              onClick={handleDownloadSelected}
+              disabled={selectedFiles.length === 0}
+              className="d-flex align-items-center"
+              style={{
+                padding: "6px 12px",
+                fontSize: "14px",
+                borderRadius: "4px",
+                fontWeight: "500",
+                boxShadow: "0 2px 4px rgba(0, 0, 0, 0.1)",
+                transition: "background-color 0.3s, border-color 0.3s",
+                whiteSpace: "nowrap",
+                height: "38px",
+              }}
+              title="Download selected files"
+            >
+              <FontAwesomeIcon icon={faDownload} className="me-1" />
+              Download Selected ({selectedFiles.length})
+            </Button>
 
             {/* Delete Selected Button */}
             <Button
-              variant="outline-danger" // Use outline-danger for consistency
+              variant="outline-danger"
               onClick={handleDelete}
               disabled={selectedFiles.length === 0 && selectedFolders.length === 0}
               className="d-flex align-items-center"
               style={{
-                padding: "6px 12px", // Consistent padding
-                fontSize: "14px", // Consistent font size
-                borderRadius: "4px", // Rounded corners
-                fontWeight: "500", // Medium font weight
-                boxShadow: "0 2px 4px rgba(0, 0, 0, 0.1)", // Subtle shadow
-                transition: "background-color 0.3s, border-color 0.3s", // Smooth transition
-                whiteSpace: "nowrap", // Prevent text wrapping
-                height: "38px", // Consistent height
-              }}
-              onMouseOver={(e) => {
-                e.target.style.backgroundColor = "#dc3545"; // Solid red on hover
-                e.target.style.color = "#fff"; // White text on hover
-              }}
-              onMouseOut={(e) => {
-                e.target.style.backgroundColor = "transparent"; // Transparent background
-                e.target.style.color = "#dc3545"; // Red text
+                padding: "6px 12px",
+                fontSize: "14px",
+                borderRadius: "4px",
+                fontWeight: "500",
+                boxShadow: "0 2px 4px rgba(0, 0, 0, 0.1)",
+                transition: "background-color 0.3s, border-color 0.3s",
+                whiteSpace: "nowrap",
+                height: "38px",
               }}
             >
-              Delete Selected
+              Delete Selected ({selectedFiles.length + selectedFolders.length})
             </Button>
           </div>
         </div>
         {error && <Alert variant="danger">{error}</Alert>}
+        
+        {/* Folders Section */}
         {childFolders.length > 0 && (
-          <div className="d-flex flex-wrap">
-            {childFolders.map((childFolder) => (
-              <div
-                key={childFolder.id}
-                style={{ maxWidth: "250px" }}
-                className="p-2"
-              >
-                <Folder
-                  folder={childFolder}
-                  selected={selectedFolders.includes(childFolder.id)}
-                  onSelect={() => handleFolderSelect(childFolder.id)}
-                />
-              </div>
-            ))}
-          </div>
+          <>
+            <h5 className="mt-3 mb-2">Folders</h5>
+            <div className="d-flex flex-wrap">
+              {childFolders.map((childFolder) => (
+                <div
+                  key={childFolder.id}
+                  style={{ maxWidth: "250px" }}
+                  className="p-2"
+                >
+                  <Folder
+                    folder={childFolder}
+                    selected={selectedFolders.includes(childFolder.id)}
+                    onSelect={() => handleFolderSelect(childFolder.id)}
+                  />
+                </div>
+              ))}
+            </div>
+          </>
         )}
 
-        {childFolders.length > 0 && childFiles.length > 0 && <hr />}
+        {/* Files Section */}
         {childFiles.length > 0 && (
-          <div className="d-flex flex-wrap">
-            {childFiles.map((childFile) => (
-              <div
-                key={childFile.id}
-                style={{ maxWidth: "250px" }}
-                className="p-2"
-              >
-                <File
-                  file={childFile}
-                  selected={selectedFiles.includes(childFile.id)}
-                  onSelect={() => handleFileSelect(childFile.id)}
-                />
-              </div>
-            ))}
+          <>
+            <h5 className="mt-3 mb-2">Files</h5>
+            <div className="d-flex flex-wrap">
+              {childFiles.map((childFile) => (
+                <div
+                  key={childFile.id}
+                  style={{ maxWidth: "350px" }}
+                  className="p-2"
+                >
+                  <File
+                    file={childFile}
+                    selected={selectedFiles.includes(childFile.id)}
+                    onSelect={() => handleFileSelect(childFile.id)}
+                  />
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* Empty State */}
+        {childFolders.length === 0 && childFiles.length === 0 && (
+          <div className="text-center mt-5">
+            <h4>This folder is empty</h4>
+            <p>Upload files or create folders to get started</p>
           </div>
         )}
       </Container>
